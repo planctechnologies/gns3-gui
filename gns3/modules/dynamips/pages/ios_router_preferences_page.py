@@ -33,7 +33,7 @@ from gns3.main_window import MainWindow
 from gns3.utils.progress_dialog import ProgressDialog
 from gns3.dialogs.symbol_selection_dialog import SymbolSelectionDialog
 from gns3.dialogs.configuration_dialog import ConfigurationDialog
-from gns3.cloud.utils import UploadFileThread
+from gns3.cloud.utils import UploadFilesThread
 
 from ..utils.decompress_ios import isIOSCompressed
 from ..utils.decompress_ios_thread import DecompressIOSThread
@@ -142,7 +142,14 @@ class IOSRouterPreferencesPage(QtGui.QWidget, Ui_IOSRouterPreferencesPageWidget)
                 self._upload_image_progress_dialog.setWindowTitle("IOS image upload")
                 self._upload_image_progress_dialog.show()
                 try:
-                    upload_thread = UploadFileThread(MainWindow.instance().cloudSettings(), self._ios_routers[key])
+                    upload_thread = UploadFilesThread(
+                        cloud_settings=MainWindow.instance().cloudSettings(),
+                        files_to_upload=[(
+                            self._ios_routers[key]["path"],
+                            'images/' + os.path.relpath(self._ios_routers[key]["path"],
+                                                        self._main_window.settings()["images_path"])
+                        )]
+                    )
                     upload_thread.completed.connect(self._imageUploadComplete)
                     upload_thread.start()
                 except Exception as e:

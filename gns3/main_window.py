@@ -56,7 +56,7 @@ from .items.shape_item import ShapeItem
 from .items.image_item import ImageItem
 from .items.note_item import NoteItem
 from .topology import Topology, TopologyInstance
-from .cloud.utils import UploadProjectThread
+from .cloud.utils import UploadProjectThread, UploadFilesThread
 from .cloud.rackspace_ctrl import get_provider
 from .cloud.exceptions import KeyPairExists
 
@@ -259,6 +259,8 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self.uiSaveProjectAsAction.triggered.connect(self._saveProjectAsActionSlot)
         self.uiExportProjectAction.triggered.connect(self._exportProjectActionSlot)
         self.uiImportProjectAction.triggered.connect(self._importProjectActionSlot)
+        self.uiMoveLocalProjectToCloudAction.triggered.connect(self._moveLocalProjectToCloudActionSlot)
+        self.uiMoveCloudProjectToLocalAction.triggered.connect(self._moveCloudProjectToLocalActionSlot)
         self.uiImportExportConfigsAction.triggered.connect(self._importExportConfigsActionSlot)
         self.uiScreenshotAction.triggered.connect(self._screenshotActionSlot)
         self.uiSnapshotAction.triggered.connect(self._snapshotActionSlot)
@@ -1626,3 +1628,28 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
                 info[name] = settings.value(name, "")
             topology.addInstance(**info)
 
+    def _moveLocalProjectToCloudActionSlot(self):
+        topology = Topology.instance()
+        images = set([
+            (
+                node.settings()['image'],
+                'images/' + os.path.relpath(node.settings()['image'], self._settings["images_path"])
+            )
+            for node in topology.nodes() if 'image' in node.settings()
+        ])
+        upload_thread = UploadFilesThread(self._cloud_settings, images)
+        progress_dialog = ProgressDialog(upload_thread, "Uploading images", "Uploading image files...", "Cancel",
+                                         parent=self)
+        progress_dialog.show()
+        progress_dialog.exec_()
+
+        #TODO if instance doesn't exist, start one, otherwise use existing instance
+
+        #TODO start devices on cloud instance (move config and nvram files to cloud?)
+
+        self._project_settings["project_type"] = "cloud"
+        self.saveProject(self._project_settings["project_path"])
+
+    def _moveCloudProjectToLocalActionSlot(self):
+        #TODO implement moving cloud project to local
+        print("move cloud project to local")

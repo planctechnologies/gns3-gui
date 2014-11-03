@@ -327,31 +327,43 @@ class UploadProjectThread(QThread):
         self.quit()
 
 
-class UploadFileThread(QThread):
+class UploadFilesThread(QThread):
     """
-    Upload a file to cloud files
+    Upload images to cloud files
+
+    :param cloud_settings:
+    :param files_to_upload: list of tuples of (file path, file name to save in cloud)
     """
 
+    error = pyqtSignal(str, bool)
     completed = pyqtSignal()
+    update = pyqtSignal(int)
 
-    def __init__(self, cloud_settings, router_settings):
+    def __init__(self, cloud_settings, files_to_upload):
         super().__init__()
         self._cloud_settings = cloud_settings
-        self._router_settings = router_settings
+        self._files_to_upload = files_to_upload
 
     def run(self):
-        disk_path = self._router_settings['path']
-        filename = self._router_settings['image']
+        self.update.emit(0)
 
-        log.debug('Uploading image {}'.format(disk_path))
-        log.debug('Cloud filename: {}'.format(filename))
-        provider = get_provider(self._cloud_settings)
-        provider.upload_file(disk_path, 'images/IOS/{}'.format(filename))
+        try:
+            for i, file_to_upload in enumerate(self._files_to_upload):
+                provider = get_provider(self._cloud_settings)
 
-        self._cloud_settings['image'] = filename
+                log.debug('Uploading image {} to cloud as {}'.format(file_to_upload[0], file_to_upload[1]))
+                provider.upload_file(file_to_upload[0], file_to_upload[1])
 
-        log.debug('Uploading image completed')
+                self.update.emit((i+1) * 100 / len(self._files_to_upload))
+                log.debug('Uploading image completed')
+        except Exception as e:
+            log.exception("Error uploading images to cloud")
+            self.error.emit("Error uploading images: {}".format(str(e)), True)
+
         self.completed.emit()
+
+    def stop(self):
+        self.quit()
 
 
 class DownloadProjectThread(QThread):
