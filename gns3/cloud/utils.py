@@ -138,7 +138,7 @@ DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confnew" --fo
 DEBIAN_FRONTEND=noninteractive apt-get -y install git python3-setuptools python3-netifaces python3-pip python3-zmq dynamips
 mkdir -p /opt/gns3
 cd /opt/gns3; git clone https://github.com/planctechnologies/gns3-server.git
-cd /opt/gns3/gns3-server; git checkout gns-110; git pull
+cd /opt/gns3/gns3-server; git checkout dev; git pull
 cd /opt/gns3/gns3-server; pip3 install -r dev-requirements.txt
 cd /opt/gns3/gns3-server; python3 ./setup.py install
 ln -sf /usr/bin/dynamips /usr/local/bin/dynamips
@@ -181,9 +181,6 @@ killall python3 gns3server gns3dms
 
 
     def run(self):
-        # Uncomment this at the same time as the commands above to test without having to push
-        # changes to github.
-
         # We might be attempting a connection before the instance is fully booted, so retry
         # when the ssh connection fails.
         ssh_connected = False
