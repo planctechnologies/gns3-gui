@@ -43,7 +43,7 @@ from .dialogs.new_project_dialog import NewProjectDialog
 from .dialogs.preferences_dialog import PreferencesDialog
 from .dialogs.snapshots_dialog import SnapshotsDialog
 from .dialogs.import_cloud_project_dialog import ImportCloudProjectDialog
-from .settings import GENERAL_SETTINGS, GENERAL_SETTING_TYPES, CLOUD_SETTINGS, CLOUD_SETTINGS_TYPES
+from .settings import GENERAL_SETTINGS, GENERAL_SETTING_TYPES, CLOUD_SETTINGS, CLOUD_SETTINGS_TYPES, ENABLE_CLOUD
 from .utils.progress_dialog import ProgressDialog
 from .utils.process_files_thread import ProcessFilesThread
 from .utils.wait_for_connection_thread import WaitForConnectionThread
@@ -59,6 +59,7 @@ from .topology import Topology, TopologyInstance
 from .cloud.utils import UploadProjectThread, UploadFilesThread
 from .cloud.rackspace_ctrl import get_provider
 from .cloud.exceptions import KeyPairExists
+from .cloud_instances import CloudInstances
 
 log = logging.getLogger(__name__)
 
@@ -119,7 +120,8 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self.uiDocksMenu.addAction(self.uiTopologySummaryDockWidget.toggleViewAction())
         self.uiDocksMenu.addAction(self.uiConsoleDockWidget.toggleViewAction())
         self.uiDocksMenu.addAction(self.uiNodesDockWidget.toggleViewAction())
-        self.uiDocksMenu.addAction(self.uiCloudInspectorDockWidget.toggleViewAction())
+        if ENABLE_CLOUD:
+            self.uiDocksMenu.addAction(self.uiCloudInspectorDockWidget.toggleViewAction())
 
         # set the images directory
         self.uiGraphicsView.updateImageFilesDir(self.imagesDirPath())
@@ -136,12 +138,10 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self._updateRecentFileActions()
 
         self._cloud_provider = None
+        CloudInstances.instance().load()
 
         # set the window icon
         self.setWindowIcon(QtGui.QIcon(":/images/gns3.ico"))
-
-        #FIXME: hide the cloud dock for release
-        # self.uiCloudInspectorDockWidget.hide()
 
         # Network Manager (used to check for update)
         self._network_manager = QtNetwork.QNetworkAccessManager(self)
@@ -388,7 +388,9 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
                 # let all modules know about the new project files directory
                 self.uiGraphicsView.updateProjectFilesDir(new_project_settings["project_files_dir"])
 
-                self._loadCloudInstances()
+                topology = Topology.instance()
+                for instance in CloudInstances.instance().instances:
+                    topology.addInstance2(instance)
 
                 self._project_settings.update(new_project_settings)
                 self.saveProject(new_project_settings["project_path"])
@@ -1285,7 +1287,6 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
                     self._project_settings["project_type"] = "local"
 
                 topology.load(json_topology)
-                self._loadCloudInstances()
 
                 if need_to_save:
                     self.saveProject(path)
@@ -1478,7 +1479,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             # do nothing if previous project was temporary
             return
 
-        self._saveCloudInstances()
+        CloudInstances.instance().save()
 
     def project_created(self, project):
         """
@@ -1585,49 +1586,6 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         dialog.show()
         dialog.exec_()
 
-    def _saveCloudInstances(self):
-        """
-        Save the list of cloud instances to the config file
-        """
-        log.debug('Saving cloud instances')
-        # save the settings
-        settings = QtCore.QSettings()
-        settings.beginGroup("CloudInstances")
-        settings.remove("")
-
-        # save the cloud instances
-        topology = Topology.instance()
-        instances = topology.instances()
-        settings.beginWriteArray("cloud_instance", len(instances))
-        index = 0
-        for instance in instances:
-            settings.setArrayIndex(index)
-            for name in instance.fields():
-                log.debug('{}={}'.format(name, getattr(instance, name)))
-                settings.setValue(name, getattr(instance, name))
-            index += 1
-        settings.endArray()
-        settings.endGroup()
-
-    def _loadCloudInstances(self):
-        """
-        Load instance info from the config file to the topology
-        """
-        log.debug('Loading cloud instances')
-        settings = QtCore.QSettings()
-        settings.beginGroup("CloudInstances")
-        topology = Topology.instance()
-
-        # Load the instances
-        size = settings.beginReadArray("cloud_instance")
-        for index in range(0, size):
-            settings.setArrayIndex(index)
-            info = {}
-            for name in TopologyInstance.fields():
-                log.debug('{}={}'.format(name, settings.value(name, "")))
-                info[name] = settings.value(name, "")
-            topology.addInstance(**info)
-
     def _moveLocalProjectToCloudActionSlot(self):
         topology = Topology.instance()
         images = set([
@@ -1653,3 +1611,4 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
     def _moveCloudProjectToLocalActionSlot(self):
         #TODO implement moving cloud project to local
         print("move cloud project to local")
+
