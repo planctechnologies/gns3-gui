@@ -29,6 +29,7 @@ import json
 import glob
 import logging
 import functools
+import ast
 
 from pkg_resources import parse_version
 
@@ -56,7 +57,7 @@ from .items.shape_item import ShapeItem
 from .items.image_item import ImageItem
 from .items.note_item import NoteItem
 from .topology import Topology, TopologyInstance
-from .cloud.utils import UploadProjectThread, UploadFilesThread
+from .cloud.utils import UploadProjectThread, UploadFilesThread, StartGNS3ServerThread, WSConnectThread, ssh_client
 from .cloud.rackspace_ctrl import get_provider
 from .cloud.exceptions import KeyPairExists
 from .cloud_instances import CloudInstances
@@ -1561,8 +1562,10 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         if self._temporary_project:
             # do nothing if project is temporary
             QtGui.QMessageBox.critical(
-                self, "Export project server",
-                "Cannot export temporary projects, please save current project first.")
+                self,
+                "Backup project",
+                "Cannot backup temporary projects, please save current project first."
+            )
             return
 
         upload_thread = UploadProjectThread(
@@ -1570,7 +1573,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             self._project_settings['project_path'],
             self._settings['images_path']
         )
-        progress_dialog = ProgressDialog(upload_thread, "Exporting Project", "Uploading project files...", "Cancel",
+        progress_dialog = ProgressDialog(upload_thread, "Backing Up Project", "Uploading project files...", "Cancel",
                                          parent=self)
         progress_dialog.show()
         progress_dialog.exec_()
@@ -1587,6 +1590,22 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         dialog.exec_()
 
     def _moveLocalProjectToCloudActionSlot(self):
+        if self._temporary_project:
+            # do nothing if project is temporary
+            QtGui.QMessageBox.critical(
+                self,
+                "Move project to Cloud",
+                "Cannot move temporary projects, please save current project first.")
+            return
+        if self._project_settings["project_type"] == "cloud":
+            # do nothing if project is already a cloud project
+            QtGui.QMessageBox.critical(
+                self,
+                "Move project to Cloud",
+                "This project is already a Cloud Project")
+            return
+
+        # Upload images to cloud storage
         topology = Topology.instance()
         images = set([
             (
@@ -1601,9 +1620,81 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         progress_dialog.show()
         progress_dialog.exec_()
 
-        #TODO if instance doesn't exist, start one, otherwise use existing instance
+        # create an instance
+        instance, keypair = self._create_instance(
+            self._project_settings["project_name"],
+            self.cloudSettings()['default_flavor'],
+            self.cloudSettings()['default_image']
+        )
+        self.add_instance_to_project(instance, keypair)
 
-        #TODO start devices on cloud instance (move config and nvram files to cloud?)
+        # start gns3 server on cloud instance
+        topology_instance = topology.getInstance(instance.id)
+
+        public_ip_found = False
+        while not public_ip_found:
+            instances = self.cloudProvider.list_instances()
+            instance = next(filter(lambda i: i.id == instance.id, instances))
+
+            # pick IPv4 address from list of addresses
+            instance_public_ip = None
+            for ip in instance.public_ips:
+                if ':' not in ip:
+                    instance_public_ip = ip
+                    public_ip_found = True
+                    break
+
+
+        start_server_thread = StartGNS3ServerThread(
+            parent=self,
+            host=instance_public_ip,
+            private_key_string=topology_instance.private_key,
+            server_id=instance.id,
+            username=self.cloudProvider.username,
+            api_key=self.cloudProvider.api_key,
+            region=self.cloudProvider.region,
+            dead_time=1800
+        )
+
+        def gns3_server_started_slot(server_id, host_ip, start_response):
+            data = ast.literal_eval(start_response)
+
+            ssl_cert = ''.join(data['SSL_CRT'])
+            ca_filename = 'cloud_server_{}.crt'.format(host_ip)
+            ca_dir = os.path.join(self._project_settings["project_files_dir"], "keys")
+            ca_file = os.path.join(ca_dir, ca_filename)
+            try:
+                os.makedirs(ca_dir)
+            except FileExistsError:
+                pass
+            with open(ca_file, 'wb') as ca_fh:
+                ca_fh.write(ssl_cert.encode('utf-8'))
+
+            wss_thread = WSConnectThread(
+                parent=self,
+                provider=self.cloudProvider,
+                server_id=server_id,
+                host=host_ip,
+                port=8000,
+                ca_file=ca_file,
+                auth_user=data['WEB_USERNAME'],
+                auth_password=data['WEB_PASSWORD'],
+                ssh_pkey=topology_instance.private_key
+            )
+            wss_thread.established.connect(ws_connected_slot)
+            wss_thread.start()
+
+        start_server_thread.gns3server_started.connect(gns3_server_started_slot)
+        start_server_thread.start()
+
+        def ws_connected_slot(server_id):
+            print("ws connected slot, server_id=" + str(server_id))
+
+        # TODO copy nvram, config, and disk files to server
+        with ssh_client(instance_public_ip, topology_instance.private_key) as client:
+            sftp = client.open_sftp()
+            
+            sftp.close()
 
         self._project_settings["project_type"] = "cloud"
         self.saveProject(self._project_settings["project_path"])
