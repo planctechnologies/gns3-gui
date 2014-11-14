@@ -30,6 +30,7 @@ import glob
 import logging
 import functools
 import ast
+import posixpath
 
 from pkg_resources import parse_version
 
@@ -1567,6 +1568,8 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
                 "Cannot backup temporary projects, please save current project first."
             )
             return
+        if self.checkForUnsavedChanges():
+            self.saveProject(self._project_settings["project_path"])
 
         upload_thread = UploadProjectThread(
             self._cloud_settings,
@@ -1604,6 +1607,13 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
                 "Move project to Cloud",
                 "This project is already a Cloud Project")
             return
+        if not self.checkForUnsavedChanges():
+            # do nothing if project is already a cloud project
+            QtGui.QMessageBox.critical(
+                self,
+                "Unsaved changes",
+                "There are unsaved changes. Please save the project first.")
+            return
 
         # Upload images to cloud storage
         topology = Topology.instance()
@@ -1614,6 +1624,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             )
             for node in topology.nodes() if 'image' in node.settings()
         ])
+        log.debug('uploading images ' + str(images) + ' to cloud')
         upload_thread = UploadFilesThread(self._cloud_settings, images)
         progress_dialog = ProgressDialog(upload_thread, "Uploading images", "Uploading image files...", "Cancel",
                                          parent=self)
@@ -1621,12 +1632,14 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         progress_dialog.exec_()
 
         # create an instance
+        log.debug('creating cloud instance')
         instance, keypair = self._create_instance(
             self._project_settings["project_name"],
             self.cloudSettings()['default_flavor'],
             self.cloudSettings()['default_image']
         )
         self.add_instance_to_project(instance, keypair)
+        CloudInstances.instance().add_instance(instance, keypair)
 
         # start gns3 server on cloud instance
         topology_instance = topology.getInstance(instance.id)
@@ -1645,6 +1658,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
                     break
 
 
+        log.debug('installing gns3server on instance')
         start_server_thread = StartGNS3ServerThread(
             parent=self,
             host=instance_public_ip,
@@ -1688,16 +1702,44 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         start_server_thread.start()
 
         def ws_connected_slot(server_id):
-            print("ws connected slot, server_id=" + str(server_id))
+            log.debug("websocket connected, server_id=" + str(server_id))
 
-        # TODO copy nvram, config, and disk files to server
-        with ssh_client(instance_public_ip, topology_instance.private_key) as client:
-            sftp = client.open_sftp()
-            
-            sftp.close()
+            # copy nvram, config, and disk files to server
+            with ssh_client(instance_public_ip, topology_instance.private_key) as client:
+                log.debug('copying device files to cloud instance')
+                sftp = client.open_sftp()
 
-        self._project_settings["project_type"] = "cloud"
-        self.saveProject(self._project_settings["project_path"])
+                def should_copy(filename):
+                    return not filename.endswith('.ghost')
+
+                project_files_dir = os.path.join(
+                    os.path.dirname(self._project_settings['project_path']),
+                    os.path.basename(os.path.dirname(self._project_settings['project_path'])) + '-files'
+                )
+                dest_project_path = posixpath.join(
+                    '/root/GNS3/projects',
+                    os.path.basename(os.path.dirname(self._project_settings['project_path']))
+                )
+
+                for root, dirs, files in os.walk(project_files_dir):
+                    directory = posixpath.normpath(posixpath.join(
+                        dest_project_path,
+                        os.path.relpath(root, project_files_dir).replace('\\', '/')
+                    ))
+                    sftp.mkdir(directory)
+                    sftp.chdir(directory)
+
+                    for file in files:
+                        local_filepath = os.path.join(root, file)
+                        if os.path.isfile(local_filepath) and should_copy(file):
+                            log.debug('copying file ' + local_filepath)
+                            sftp.put(local_filepath, file)
+                            log.debug('copied file successfully')
+
+                sftp.close()
+
+            self._project_settings["project_type"] = "cloud"
+            self.saveProject(self._project_settings["project_path"])
 
     def _moveCloudProjectToLocalActionSlot(self):
         #TODO implement moving cloud project to local
