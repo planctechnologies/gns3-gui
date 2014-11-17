@@ -19,6 +19,8 @@
 Default QEMU settings.
 """
 
+from gns3.node import Node
+
 QEMU_SETTINGS = {
     "console_start_port_range": 5001,
     "console_end_port_range": 5500,
@@ -34,3 +36,71 @@ QEMU_SETTING_TYPES = {
     "udp_end_port_range": int,
     "use_local_server": bool,
 }
+
+QEMU_VM_SETTINGS = {
+    "name": "",
+    "default_symbol": ":/symbols/qemu_guest.normal.svg",
+    "hover_symbol": ":/symbols/qemu_guest.selected.svg",
+    "category": Node.end_devices,
+    "qemu_path": "",
+    "hda_disk_image": "",
+    "hdb_disk_image": "",
+    "ram": 256,
+    "adapters": 1,
+    "adapter_type": "e1000",
+    "options": "",
+    "initrd": "",
+    "kernel_image": "",
+    "kernel_command_line": "",
+    "server": "local"
+}
+
+QEMU_VM_SETTING_TYPES = {
+    "name": str,
+    "default_symbol": str,
+    "hover_symbol": str,
+    "category": int,
+    "qemu_path": str,
+    "hda_disk_image": str,
+    "hdb_disk_image": str,
+    "ram": int,
+    "adapters": int,
+    "adapter_type": str,
+    "options": str,
+    "initrd": str,
+    "kernel_image": str,
+    "kernel_command_line": str,
+    "server": str
+}
+
+# Use a hardcoded list of binaries rather than a dynamic one so the user
+# doesn't require a running cloud instance to upload qemu images.
+QEMU_BINARIES_FOR_CLOUD = [
+    "qemu-system-arm",
+    "qemu-system-microblaze",
+    "qemu-system-mipsel",
+    "qemu-system-ppcemb",
+    "qemu-system-sparc64",
+    "qemu-system-cris",
+    "qemu-system-microblazeel",
+    "qemu-system-moxie",
+    "qemu-system-s390x",
+    "qemu-system-unicore32",
+    "qemu-system-i386",
+    "qemu-system-mips",
+    "qemu-system-or32",
+    "qemu-system-sh4",
+    "qemu-system-x86_64",
+    "qemu-system-lm32",
+    "qemu-system-mips64",
+    "qemu-system-ppc",
+    "qemu-system-sh4eb",
+    "qemu-system-xtensa",
+    "qemu-system-alpha",
+    "qemu-system-m68k",
+    "qemu-system-mips64el",
+    "qemu-system-ppc64",
+    "qemu-system-sparc",
+    "qemu-system-xtensaeb",
+]
+QEMU_BINARIES_FOR_CLOUD.sort()

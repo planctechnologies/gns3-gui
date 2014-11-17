@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'gns3/ui/main_window.ui'
+# Form implementation generated from reading ui file '/home/grossmj/PycharmProjects/gns3-gui/gns3/ui/main_window.ui'
 #
-# Created: Wed Oct 29 11:09:51 2014
+# Created: Wed Nov 12 19:39:12 2014
 #      by: PyQt4 UI code generator 4.10.4
 #
 # WARNING! All changes made in this file will be lost!
@@ -44,6 +44,7 @@ class Ui_MainWindow(object):
 "}\n"
 "\n"
 ""))
+        MainWindow.setDockOptions(QtGui.QMainWindow.AllowTabbedDocks|QtGui.QMainWindow.AnimatedDocks)
         MainWindow.setUnifiedTitleAndToolBarOnMac(False)
         self.uiCentralWidget = QtGui.QWidget(MainWindow)
         self.uiCentralWidget.setObjectName(_fromUtf8("uiCentralWidget"))
@@ -61,7 +62,7 @@ class Ui_MainWindow(object):
         self.gridlayout.addWidget(self.uiGraphicsView, 0, 0, 1, 1)
         MainWindow.setCentralWidget(self.uiCentralWidget)
         self.uiMenuBar = QtGui.QMenuBar(MainWindow)
-        self.uiMenuBar.setGeometry(QtCore.QRect(0, 0, 980, 21))
+        self.uiMenuBar.setGeometry(QtCore.QRect(0, 0, 980, 25))
         self.uiMenuBar.setObjectName(_fromUtf8("uiMenuBar"))
         self.uiEditMenu = QtGui.QMenu(self.uiMenuBar)
         self.uiEditMenu.setObjectName(_fromUtf8("uiEditMenu"))
@@ -225,6 +226,7 @@ class Ui_MainWindow(object):
         self.uiStartAllAction = QtGui.QAction(MainWindow)
         self.uiStartAllAction.setEnabled(True)
         icon5 = QtGui.QIcon()
+        icon5.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/play7-test.svg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         icon5.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/play7-test.svg")), QtGui.QIcon.Normal, QtGui.QIcon.On)
         icon5.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/play7-test.svg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         icon5.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/play2-test.svg")), QtGui.QIcon.Active, QtGui.QIcon.Off)
@@ -397,7 +399,9 @@ class Ui_MainWindow(object):
         self.uiAddLinkAction.setCheckable(True)
         icon29 = QtGui.QIcon()
         icon29.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/connection-new.svg")), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon29.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/cancel-connection.svg")), QtGui.QIcon.Normal, QtGui.QIcon.On)
         icon29.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/connection-new-hover.svg")), QtGui.QIcon.Active, QtGui.QIcon.Off)
+        icon29.addPixmap(QtGui.QPixmap(_fromUtf8(":/icons/cancel-connection.svg")), QtGui.QIcon.Active, QtGui.QIcon.On)
         self.uiAddLinkAction.setIcon(icon29)
         self.uiAddLinkAction.setObjectName(_fromUtf8("uiAddLinkAction"))
         self.uiGettingStartedAction = QtGui.QAction(MainWindow)
@@ -414,6 +418,8 @@ class Ui_MainWindow(object):
         self.uiMoveLocalProjectToCloudAction.setObjectName(_fromUtf8("uiMoveLocalProjectToCloudAction"))
         self.uiMoveCloudProjectToLocalAction = QtGui.QAction(MainWindow)
         self.uiMoveCloudProjectToLocalAction.setObjectName(_fromUtf8("uiMoveCloudProjectToLocalAction"))
+        self.uiDarkStyleAction = QtGui.QAction(MainWindow)
+        self.uiDarkStyleAction.setObjectName(_fromUtf8("uiDarkStyleAction"))
         self.uiEditMenu.addAction(self.uiSelectAllAction)
         self.uiEditMenu.addAction(self.uiSelectNoneAction)
         self.uiEditMenu.addSeparator()
@@ -441,6 +447,7 @@ class Ui_MainWindow(object):
         self.uiHelpMenu.addAction(self.uiAboutAction)
         self.uiStyleMenu.addAction(self.uiDefaultStyleAction)
         self.uiStyleMenu.addAction(self.uiEnergySavingStyleAction)
+        self.uiStyleMenu.addAction(self.uiDarkStyleAction)
         self.uiViewMenu.addAction(self.uiZoomInAction)
         self.uiViewMenu.addAction(self.uiZoomOutAction)
         self.uiViewMenu.addAction(self.uiZoomResetAction)
@@ -662,6 +669,7 @@ class Ui_MainWindow(object):
         self.uiImportProjectAction.setText(_translate("MainWindow", "Restore backup from cloud", None))
         self.uiMoveLocalProjectToCloudAction.setText(_translate("MainWindow", "Move local project to cloud", None))
         self.uiMoveCloudProjectToLocalAction.setText(_translate("MainWindow", "Move cloud project to local", None))
+        self.uiDarkStyleAction.setText(_translate("MainWindow", "Dark Style", None))
 
 from ..topology_summary_view import TopologySummaryView
 from ..cloud_inspector_view import CloudInspectorView

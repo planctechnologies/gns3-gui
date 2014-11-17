@@ -19,6 +19,8 @@
 Wizard for VirtualBox VMs.
 """
 
+import sys
+
 from gns3.qt import QtCore, QtGui
 from gns3.servers import Servers
 from gns3.utils.connect_to_server import ConnectToServer
@@ -42,6 +44,9 @@ class VirtualBoxVMWizard(QtGui.QWizard, Ui_VirtualBoxVMWizard):
         self.setupUi(self)
         self.setPixmap(QtGui.QWizard.LogoPixmap, QtGui.QPixmap(":/icons/virtualbox.png"))
         self.setWizardStyle(QtGui.QWizard.ModernStyle)
+        if sys.platform.startswith("darwin"):
+            # we want to see the cancel button on OSX
+            self.setOptions(QtGui.QWizard.NoDefaultButton)
 
         if VirtualBox.instance().settings()["use_local_server"]:
             # skip the server page if we use the local server
@@ -67,7 +72,7 @@ class VirtualBoxVMWizard(QtGui.QWizard, Ui_VirtualBoxVMWizard):
                 VirtualBox.instance().getVirtualBoxVMsFromServer(self._server, self._getVirtualBoxVMsFromServerCallback)
             except ModuleError as e:
                 self._vbox_vms_progress_dialog.reject()
-                QtGui.QMessageBox.critical(self, "Qemu binaries", "Error while getting the QEMU binaries: {}".format(e))
+                QtGui.QMessageBox.critical(self, "VirtualBox VMs", "Error while getting the VirtualBox VMs: {}".format(e))
 
     def _getVirtualBoxVMsFromServerCallback(self, result, error=False):
         """
@@ -113,6 +118,10 @@ class VirtualBoxVMWizard(QtGui.QWizard, Ui_VirtualBoxVMWizard):
             if not server.connected() and ConnectToServer(self, server) is False:
                 return False
             self._server = server
+        if self.currentPage() == self.uiVirtualBoxWizardPage:
+            if not self.uiVMListComboBox.count():
+                QtGui.QMessageBox.critical(self, "VirtualBox VMs", "There is no VirtualBox VM available!")
+                return False
         return True
 
     def getSettings(self):
@@ -121,9 +130,6 @@ class VirtualBoxVMWizard(QtGui.QWizard, Ui_VirtualBoxVMWizard):
 
         :return: settings dict
         """
-
-        if not self.uiVMListComboBox.count():
-            return {}
 
         if VirtualBox.instance().settings()["use_local_server"] or self.uiLocalRadioButton.isChecked():
             server = "local"

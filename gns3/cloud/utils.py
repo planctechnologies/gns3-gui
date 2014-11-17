@@ -12,6 +12,7 @@ import zipfile
 from PyQt4.QtCore import QThread
 from PyQt4.QtCore import pyqtSignal
 
+from .exceptions import KeyPairExists
 from .rackspace_ctrl import RackspaceCtrl, get_provider
 from ..topology import Topology
 from ..servers import Servers
@@ -67,9 +68,7 @@ class ListInstancesThread(QThread):
     def run(self):
         try:
             instances = self._provider.list_instances()
-            log.debug('Instance list:')
-            for instance in instances:
-                log.debug('  name={}, state={}'.format(instance.name, instance.state))
+            log.debug('Instance list: {}'.format([(i.name, i.state) for i in instances]))
             self.instancesReady.emit(instances)
         except Exception as e:
             log.info('list_instances error: {}'.format(e))
@@ -89,8 +88,19 @@ class CreateInstanceThread(QThread):
         self._image_id = image_id
 
     def run(self):
-        k = self._provider.create_key_pair(self._name)
+        log.debug("Creating cloud keypair with name {}".format(self._name))
+        try:
+            k = self._provider.create_key_pair(self._name)
+        except KeyPairExists:
+            log.debug("Cloud keypair with name {} exists.  Recreating.".format(self._name))
+            # delete keypairs if they already exist
+            self._provider.delete_key_pair_by_name(self._name)
+            k = self._provider.create_key_pair(self._name)
+
+        log.debug("Creating cloud server with name {}".format(self._name))
         i = self._provider.create_instance(self._name, self._flavor_id, self._image_id, k)
+        log.debug("Cloud server {} created".format(self._name))
+
         self.instanceCreated.emit(i, k)
 
 
@@ -120,28 +130,42 @@ class StartGNS3ServerThread(QThread):
 # This is for testing without pushing to github
 #     commands = '''
 # DEBIAN_FRONTEND=noninteractive dpkg --configure -a
+# DEBIAN_FRONTEND=noninteractive dpkg --add-architecture i386
 # DEBIAN_FRONTEND=noninteractive apt-get -y update
 # DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
-# DEBIAN_FRONTEND=noninteractive apt-get -y install git python3-setuptools python3-netifaces python3-pip python3-zmq dynamips
+# DEBIAN_FRONTEND=noninteractive apt-get -y install git python3-setuptools python3-netifaces python3-pip python3-zmq dynamips qemu-system
+# DEBIAN_FRONTEND=noninteractive apt-get -y install libc6:i386 libstdc++6:i386 libssl1.0.0:i386
+# ln -s /lib/i386-linux-gnu/libcrypto.so.1.0.0 /lib/i386-linux-gnu/libcrypto.so.4
 # mkdir -p /opt/gns3
 # tar xzf /tmp/gns3-server.tgz -C /opt/gns3
 # cd /opt/gns3/gns3-server; pip3 install -r dev-requirements.txt
 # cd /opt/gns3/gns3-server; python3 ./setup.py install
 # ln -sf /usr/bin/dynamips /usr/local/bin/dynamips
+# wget 'https://github.com/GNS3/iouyap/releases/download/0.95/iouyap.tar.gz'
+# python -c 'import struct; open("/etc/hostid", "w").write(struct.pack("i", 00000000))'
+# hostname gns3-iouvm
+# tar xzf iouyap.tar.gz -C /usr/local/bin
 # killall python3 gns3server gns3dms
 # '''
 
     commands = '''
 DEBIAN_FRONTEND=noninteractive dpkg --configure -a
+DEBIAN_FRONTEND=noninteractive dpkg --add-architecture i386
 DEBIAN_FRONTEND=noninteractive apt-get -y update
 DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confnew" --force-yes -fuy dist-upgrade
-DEBIAN_FRONTEND=noninteractive apt-get -y install git python3-setuptools python3-netifaces python3-pip python3-zmq dynamips
+DEBIAN_FRONTEND=noninteractive apt-get -y install git python3-setuptools python3-netifaces python3-pip python3-zmq dynamips qemu-system
+DEBIAN_FRONTEND=noninteractive apt-get -y install libc6:i386 libstdc++6:i386 libssl1.0.0:i386
+ln -s /lib/i386-linux-gnu/libcrypto.so.1.0.0 /lib/i386-linux-gnu/libcrypto.so.4
 mkdir -p /opt/gns3
 cd /opt/gns3; git clone https://github.com/planctechnologies/gns3-server.git
 cd /opt/gns3/gns3-server; git checkout dev; git pull
 cd /opt/gns3/gns3-server; pip3 install -r dev-requirements.txt
 cd /opt/gns3/gns3-server; python3 ./setup.py install
 ln -sf /usr/bin/dynamips /usr/local/bin/dynamips
+wget 'https://github.com/GNS3/iouyap/releases/download/0.95/iouyap.tar.gz'
+tar xzf iouyap.tar.gz -C /usr/local/bin
+python -c 'import struct; open("/etc/hostid", "w").write(struct.pack("i", 00000000))'
+hostname gns3-iouvm # set hostname for iou
 killall python3 gns3server gns3dms
 '''
 
@@ -224,7 +248,7 @@ class WSConnectThread(QThread):
     established = pyqtSignal(str)
 
     def __init__(self, parent, provider, server_id, host, port, ca_file,
-                 auth_user, auth_password, ssh_pkey):
+                 auth_user, auth_password, ssh_pkey, instance_id):
         super(QThread, self).__init__(parent)
         self._provider = provider
         self._server_id = server_id
@@ -234,6 +258,7 @@ class WSConnectThread(QThread):
         self._auth_user = auth_user
         self._auth_password = auth_password
         self._ssh_pkey = ssh_pkey
+        self._instance_id = instance_id
 
     def run(self):
         """
@@ -243,7 +268,8 @@ class WSConnectThread(QThread):
         log.debug('WSConnectThread.run() begin')
         servers = Servers.instance()
         server = servers.getCloudServer(self._host, self._port, self._ca_file,
-                                        self._auth_user, self._auth_password, self._ssh_pkey)
+                                        self._auth_user, self._auth_password, self._ssh_pkey,
+                                        self._instance_id)
         log.debug('after getCloudServer call. {}'.format(server))
         self.established.emit(str(self._server_id))
 
@@ -262,8 +288,8 @@ class UploadProjectThread(QThread):
     completed = pyqtSignal()
     update = pyqtSignal(int)
 
-    def __init__(self, cloud_settings, project_path, images_path):
-        super().__init__()
+    def __init__(self, parent, cloud_settings, project_path, images_path):
+        super(QThread, self).__init__(parent)
         self.cloud_settings = cloud_settings
         self.project_path = project_path
         self.images_path = images_path
@@ -329,10 +355,9 @@ class UploadProjectThread(QThread):
 
 class UploadFilesThread(QThread):
     """
-    Upload images to cloud files
+    Upload multiple files to cloud files
 
-    :param cloud_settings:
-    :param files_to_upload: list of tuples of (file path, file name to save in cloud)
+    uploads - A list of 2-tuples of (local_src_path, remote_dst_path)
     """
 
     error = pyqtSignal(str, bool)
@@ -376,8 +401,8 @@ class DownloadProjectThread(QThread):
     completed = pyqtSignal()
     update = pyqtSignal(int)
 
-    def __init__(self, cloud_project_file_name, project_dest_path, images_dest_path, cloud_settings):
-        super().__init__()
+    def __init__(self, parent, cloud_project_file_name, project_dest_path, images_dest_path, cloud_settings):
+        super(QThread, self).__init__(parent)
         self.project_name = cloud_project_file_name
         self.project_dest_path = project_dest_path
         self.images_dest_path = images_dest_path
@@ -433,8 +458,8 @@ class DeleteProjectThread(QThread):
     completed = pyqtSignal()
     update = pyqtSignal(int)
 
-    def __init__(self, project_file_name, cloud_settings):
-        super().__init__()
+    def __init__(self, parent, project_file_name, cloud_settings):
+        super(QThread, self).__init__(parent)
         self.project_file_name = project_file_name
         self.cloud_settings = cloud_settings
 

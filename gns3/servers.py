@@ -53,6 +53,7 @@ class Servers(QtCore.QObject):
         self._cloud_servers = {}
         self._local_server_path = ""
         self._local_server_auto_start = True
+        self._local_server_allow_console_from_anywhere = False
         self._local_server_proccess = None
         self._settings = self._loadSettings()
         self._remote_server_iter_pos = 0
@@ -78,8 +79,15 @@ class Servers(QtCore.QObject):
         local_server_port = settings.value("local_server_port", DEFAULT_LOCAL_SERVER_PORT, type=int)
         local_server_path = settings.value("local_server_path", DEFAULT_LOCAL_SERVER_PATH)
         local_server_auto_start = settings.value("local_server_auto_start", True, type=bool)
+        local_server_allow_console_from_anywhere = settings.value("local_server_allow_console_from_anywhere", False, type=bool)
         heartbeat_freq = settings.value("heartbeat_freq", DEFAULT_HEARTBEAT_FREQ, type=int)
-        self.setLocalServer(local_server_path, local_server_host, local_server_port, local_server_auto_start, heartbeat_freq)
+
+        self.setLocalServer(local_server_path,
+                            local_server_host,
+                            local_server_port,
+                            local_server_auto_start,
+                            local_server_allow_console_from_anywhere,
+                            heartbeat_freq)
 
         # load the remote servers
         size = settings.beginReadArray("remote")
@@ -109,6 +117,7 @@ class Servers(QtCore.QObject):
             settings.setValue("local_server_port", self._local_server.port)
             settings.setValue("local_server_path", self._local_server_path)
             settings.setValue("local_server_auto_start", self._local_server_auto_start)
+            settings.setValue("local_server_allow_console_from_anywhere", self._local_server_allow_console_from_anywhere)
 
         # save the remote servers
         settings.beginWriteArray("remote", len(self._remote_servers))
@@ -131,6 +140,16 @@ class Servers(QtCore.QObject):
 
         return self._local_server_auto_start
 
+    def localServerAllowConsoleFromAnywhere(self):
+        """
+        Returns either the local server
+        is allows console connections to any local IP address.
+
+        :returns: boolean
+        """
+
+        return self._local_server_allow_console_from_anywhere
+
     def localServerPath(self):
         """
         Returns the local server path.
@@ -145,7 +164,10 @@ class Servers(QtCore.QObject):
         Starts the local server process.
         """
 
-        command = '"{executable}" --host={host} --port={port}'.format(executable=path, host=host, port=port)
+        command = '"{executable}" --host={host} --port={port} --console_bind_to_any={bind}'.format(executable=path,
+                                                                                                   host=host,
+                                                                                                   port=port,
+                                                                                                   bind=self._local_server_allow_console_from_anywhere)
 
         # settings_dir = os.path.dirname(QtCore.QSettings().fileName())
         # if os.path.isdir(settings_dir):
@@ -191,7 +213,7 @@ class Servers(QtCore.QObject):
             if wait:
                 self._local_server_proccess.wait()
 
-    def setLocalServer(self, path, host, port, auto_start, heartbeat_freq=DEFAULT_HEARTBEAT_FREQ):
+    def setLocalServer(self, path, host, port, auto_start, allow_console_from_anywhere, heartbeat_freq=DEFAULT_HEARTBEAT_FREQ):
         """
         Sets the local server.
 
@@ -200,11 +222,13 @@ class Servers(QtCore.QObject):
         :param port: port of the server (integer)
         :param auto_start: either the local server should be
         automatically started on startup (boolean)
+        :param allow_console_from_anywhere: allow console connections to any local IP address
         :param heartbeat_freq: The interval to send heartbeats to the server
         """
 
         self._local_server_path = path
         self._local_server_auto_start = auto_start
+        self._local_server_allow_console_from_anywhere = allow_console_from_anywhere
         if self._local_server:
             if self._local_server.host == host and self._local_server.port == port:
                 return
@@ -299,7 +323,7 @@ class Servers(QtCore.QObject):
 
         return self._remote_servers
 
-    def getCloudServer(self, host, port, ca_file, auth_user, auth_password, ssh_pkey):
+    def getCloudServer(self, host, port, ca_file, auth_user, auth_password, ssh_pkey, instance_id):
         """
         Return a websocket connection to the cloud server, creating one if none exists.
 
@@ -315,10 +339,10 @@ class Servers(QtCore.QObject):
 
         heartbeat_freq = self._settings.value("heartbeat_freq", DEFAULT_HEARTBEAT_FREQ)
         return self._addCloudServer(host, port, ca_file, auth_user, auth_password, ssh_pkey,
-                                    heartbeat_freq)
+                                    heartbeat_freq, instance_id)
     
     def _addCloudServer(self, host, port, ca_file, auth_user, auth_password, ssh_pkey,
-                        heartbeat_freq):
+                        heartbeat_freq, instance_id):
         """
         Create a websocket connection to the specified cloud server
 
@@ -334,7 +358,7 @@ class Servers(QtCore.QObject):
         log.debug('Starting SecureWebSocketClient url={}'.format(url))
         log.debug('Starting SecureWebSocketClient ca_file={}'.format(ca_file))
         log.debug('Starting SecureWebSocketClient ssh_pkey={}'.format(ssh_pkey))
-        server = SecureWebSocketClient(url)
+        server = SecureWebSocketClient(url, instance_id=instance_id)
         server.setSecureOptions(ca_file, auth_user, auth_password, ssh_pkey)
         server.setCloud(True)
         server.enableHeartbeatsAt(heartbeat_freq)

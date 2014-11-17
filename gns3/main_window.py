@@ -19,6 +19,8 @@
 Main window for the GUI.
 """
 
+import traceback
+import sys
 import os
 import platform
 import time
@@ -92,12 +94,6 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         super(MainWindow, self).__init__(parent)
         self.setupUi(self)
 
-        try:
-            from .news_dock_widget import NewsDockWidget
-            self.addDockWidget(QtCore.Qt.DockWidgetArea(QtCore.Qt.RightDockWidgetArea), NewsDockWidget(self))
-        except ImportError:
-            pass
-
         self._settings = {}
         self._cloud_settings = {}
         self._loadSettings()
@@ -132,7 +128,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         for i in range(0, self._max_recent_files):
             action = QtGui.QAction(self.uiFileMenu)
             action.setVisible(False)
-            action.triggered.connect(self._openRecentFileSlot)
+            action.triggered.connect(self.openRecentFileSlot)
             self._recent_file_actions.append(action)
         self.uiFileMenu.insertActions(self.uiQuitAction, self._recent_file_actions)
         self._recent_file_actions_separator = self.uiFileMenu.insertSeparator(self.uiQuitAction)
@@ -140,6 +136,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self._updateRecentFileActions()
 
         self._cloud_provider = None
+        CloudInstances.instance().clear()
         CloudInstances.instance().load()
 
         # set the window icon
@@ -256,7 +253,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
 
         # file menu connections
         self.uiNewProjectAction.triggered.connect(self._newProjectActionSlot)
-        self.uiOpenProjectAction.triggered.connect(self._openProjectActionSlot)
+        self.uiOpenProjectAction.triggered.connect(self.openProjectActionSlot)
         self.uiSaveProjectAction.triggered.connect(self._saveProjectActionSlot)
         self.uiSaveProjectAsAction.triggered.connect(self._saveProjectAsActionSlot)
         self.uiExportProjectAction.triggered.connect(self._exportProjectActionSlot)
@@ -285,6 +282,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         # style menu connections
         self.uiDefaultStyleAction.triggered.connect(self._defaultStyleActionSlot)
         self.uiEnergySavingStyleAction.triggered.connect(self._energySavingStyleActionSlot)
+        self.uiDarkStyleAction.triggered.connect(self._darkStyleActionSlot)
 
         # control menu connections
         self.uiStartAllAction.triggered.connect(self._startAllActionSlot)
@@ -326,6 +324,9 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self.project_about_to_close_signal.connect(self.shutdown_cloud_instances)
         self.project_new_signal.connect(self.project_created)
 
+        # cloud inspector
+        self.CloudInspectorView.instanceSelected.connect(self._cloud_instance_selected)
+
     def telnetConsoleCommand(self):
         """
         Returns the Telnet console command line.
@@ -362,6 +363,33 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
 
         self._ignore_unsaved_state = value
 
+    def _createNewProject(self, new_project_settings):
+        """
+        Crates a new project.
+
+        :param new_project_settings: project settings (dict)
+        """
+
+        self.uiGraphicsView.reset()
+        # create the destination directory for project files
+        try:
+            os.makedirs(new_project_settings["project_files_dir"])
+        except FileExistsError:
+            pass
+        except OSError as e:
+            QtGui.QMessageBox.critical(self, "New project", "Could not create project files directory {}: {}".format(new_project_settings["project_files_dir"]), str(e))
+            return
+
+        # let all modules know about the new project files directory
+        self.uiGraphicsView.updateProjectFilesDir(new_project_settings["project_files_dir"])
+
+        topology = Topology.instance()
+        for instance in CloudInstances.instance().instances:
+            topology.addInstance2(instance)
+
+        self._project_settings.update(new_project_settings)
+        self.saveProject(new_project_settings["project_path"])
+
     def _newProjectActionSlot(self):
         """
         Slot called to create a new project.
@@ -375,34 +403,14 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             self.project_about_to_close_signal.emit(self._project_settings["project_path"])
 
             if create_new_project:
-                self.uiGraphicsView.reset()
                 new_project_settings = project_dialog.getNewProjectSettings()
-
-                # create the destination directory for project files
-                try:
-                    os.makedirs(new_project_settings["project_files_dir"])
-                except FileExistsError:
-                    pass
-                except OSError as e:
-                    QtGui.QMessageBox.critical(self, "New project", "Could not create project files directory {}: {}".format(new_project_settings["project_files_dir"]), str(e))
-                    return
-
-                # let all modules know about the new project files directory
-                self.uiGraphicsView.updateProjectFilesDir(new_project_settings["project_files_dir"])
-
-                topology = Topology.instance()
-                for instance in CloudInstances.instance().instances:
-                    topology.addInstance2(instance)
-
-                self._project_settings.update(new_project_settings)
-                self.saveProject(new_project_settings["project_path"])
-
+                self.uiGraphicsView.reset(new_project_settings)
             else:
                 self._createTemporaryProject()
 
             self.project_new_signal.emit(self._project_settings["project_path"])
 
-    def _openProjectActionSlot(self):
+    def openProjectActionSlot(self):
         """
         Slot called to open a project.
         """
@@ -410,14 +418,14 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         path, _ = QtGui.QFileDialog.getOpenFileNameAndFilter(self,
                                                              "Open project",
                                                              self.projectsDirPath(),
-                                                             "All files (*.*);;GNS3 project files (*.gns3)",
+                                                             "All files (*.*);;GNS3 project files (*.gns3);;NET files (*.net)",
                                                              "GNS3 project files (*.gns3)")
         if path and self.checkForUnsavedChanges():
             self.project_about_to_close_signal.emit(self._project_settings["project_path"])
             if self.loadProject(path):
                 self.project_new_signal.emit(path)
 
-    def _openRecentFileSlot(self):
+    def openRecentFileSlot(self):
         """
         Slot called to open recent file from the File menu.
         """
@@ -636,22 +644,6 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             if isinstance(item, LinkItem):
                 item.adjust()
 
-    def _defaultStyleActionSlot(self):
-        """
-        Slot called to set the default style.
-        """
-
-        self.setStyleSheet("")
-        self.uiEnergySavingStyleAction.setChecked(False)
-
-    def _energySavingStyleActionSlot(self):
-        """
-        Slot called to set the energy saving style.
-        """
-
-        self.setStyleSheet("QMainWindow {} QMenuBar { background: black; } QDockWidget { background: black; color: white; } QToolBar { background: black; } QFrame { background: gray; } QToolButton { width: 30px; height: 30px; /*border:solid 1px black opacity 0.4;*/ /*background-none;*/ } QStatusBar { /*    background-image: url(:/pictures/pictures/texture_blackgrid.png);*/     background: black; color: rgb(255,255,255); }")
-        self.uiDefaultStyleAction.setChecked(False)
-
     def _startAllActionSlot(self):
         """
         Slot called when starting all the nodes.
@@ -835,7 +827,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
 
         dialog = GettingStartedDialog(self)
         dialog.showit()
-        if auto is True and dialog.showit():
+        if auto is True and not dialog.showit():
             return
         dialog.show()
         dialog.exec_()
@@ -1036,9 +1028,13 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         Called by QTimer.singleShot to load everything needed at startup.
         """
 
+        try:
+            from .news_dock_widget import NewsDockWidget
+            self.addDockWidget(QtCore.Qt.DockWidgetArea(QtCore.Qt.RightDockWidgetArea), NewsDockWidget(self))
+        except ImportError:
+            pass
+
         self._gettingStartedActionSlot(auto=True)
-        self._createTemporaryProject()
-        self._newProjectActionSlot()
 
         # connect to the local server
         servers = Servers.instance()
@@ -1103,6 +1099,16 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
                     QtGui.QMessageBox.critical(self, "Local server", "Could not connect to the local server {host} on port {port}: {error}".format(host=server.host,
                                                                                                                                                    port=server.port,
                                                                                                                                                    error=e))
+
+        self._createTemporaryProject()
+        if self._settings["auto_launch_project_dialog"]:
+            project_dialog = NewProjectDialog(self, showed_from_startup=True)
+            project_dialog.show()
+            create_new_project = project_dialog.exec_()
+            if create_new_project:
+                new_project_settings = project_dialog.getNewProjectSettings()
+                self._createNewProject(new_project_settings)
+                self.project_new_signal.emit(self._project_settings["project_path"])
 
         if self._settings["check_for_update"]:
             # automatic check for update every week (604800 seconds)
@@ -1237,6 +1243,53 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self._setCurrentFile(path)
         return True
 
+    def _convertOldProject(self, path):
+        """
+        Converts old ini-style GNS3 topologies (<=0.8.7) to the newer version 1+ JSON format.
+
+        :param path: path to the project file.
+        """
+
+        try:
+            from gns3converter.main import do_conversion, get_snapshots, ConvertError
+        except ImportError:
+            QtGui.QMessageBox.critical(self, "GNS3 converter", "Please install gns3-converter in order to open old ini-style GNS3 projects")
+            return
+
+        try:
+            project_name = os.path.basename(os.path.dirname(path))
+            project_dir = os.path.join(self._settings["projects_path"], project_name)
+
+            while os.path.isdir(project_dir):
+                text, ok = QtGui.QInputDialog.getText(self,
+                                                      "GNS3 converter",
+                                                      "Project '{}' already exists. Please choose an alternative project name:".format(project_name),
+                                                      text=project_name + "2")
+                if ok:
+                    project_name = text
+                    project_dir = os.path.join(self._settings["projects_path"], project_name)
+                else:
+                    return
+
+            for snapshot_def in get_snapshots(path):
+                do_conversion(snapshot_def, project_name, project_dir, quiet=True)
+
+            topology_def = {'file': path, 'snapshot': False}
+            do_conversion(topology_def, project_name, project_dir, quiet=True)
+        except ConvertError as e:
+            QtGui.QMessageBox.critical(self, "GNS3 converter", "Could not convert {}: {}".format(path, e))
+            return
+        except Exception:
+            exc_type, exc_value, exc_tb = sys.exc_info()
+            lines = traceback.format_exception(exc_type, exc_value, exc_tb)
+            tb = "".join(lines)
+            MessageBox(self, "GNS3 converter", "Unexpected exception while converting {}".format(path), details=tb)
+            return
+
+        QtGui.QMessageBox.information(self, "GNS3 converter", "Your project has been converted to a new format and can be found in: {}".format(project_dir))
+        project_path = os.path.join(project_dir, project_name + ".gns3")
+        self.loadProject(project_path)
+
     def loadProject(self, path):
         """
         Loads a project into GNS3.
@@ -1247,6 +1300,12 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self.uiGraphicsView.reset()
         topology = Topology.instance()
         try:
+
+            extension = os.path.splitext(path)[1]
+            if extension == ".net":
+                self._convertOldProject(path)
+                return
+
             QtGui.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
             with open(path, "r") as f:
                 need_to_save = False
@@ -1572,6 +1631,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             self.saveProject(self._project_settings["project_path"])
 
         upload_thread = UploadProjectThread(
+            self,
             self._cloud_settings,
             self._project_settings['project_path'],
             self._settings['images_path']
@@ -1753,3 +1813,112 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         #TODO implement moving cloud project to local
         print("move cloud project to local")
 
+    def _cloud_instance_selected(self, instance_id):
+        """
+        Clear selection, then select all the nodes on the graphics view
+        running on the instance_id instance
+        """
+        self.uiGraphicsView.scene().clearSelection()
+        for item in self.uiGraphicsView.scene().items():
+            if isinstance(item, NodeItem):
+                if item.node()._server.instance_id == instance_id:
+                    item.setSelected(True)
+
+    def _getStyleIcon(self, normal_file, active_file):
+
+        icon = QtGui.QIcon()
+        icon.addPixmap(QtGui.QPixmap(normal_file), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap(active_file), QtGui.QIcon.Active, QtGui.QIcon.Off)
+        return icon
+
+    def _defaultStyleActionSlot(self):
+        """
+        Slot called to set the default style.
+        """
+
+        self.setStyleSheet("")
+        self.uiEnergySavingStyleAction.setChecked(False)
+
+        self.uiNewProjectAction.setIcon(QtGui.QIcon(":/icons/new-project.svg"))
+        self.uiOpenProjectAction.setIcon(QtGui.QIcon(":/icons/open.svg"))
+        self.uiSaveProjectAction.setIcon(QtGui.QIcon(":/icons/save.svg"))
+        self.uiSaveProjectAsAction.setIcon(QtGui.QIcon(":/icons/save-as.svg"))
+        self.uiImportExportConfigsAction.setIcon(QtGui.QIcon(":/icons/import_export_configs.svg"))
+        self.uiScreenshotAction.setIcon(QtGui.QIcon(":/icons/camera-photo.svg"))
+        self.uiSnapshotAction.setIcon(QtGui.QIcon(":/icons/snapshot.svg"))
+        self.uiQuitAction.setIcon(QtGui.QIcon(":/icons/quit.svg"))
+        self.uiPreferencesAction.setIcon(QtGui.QIcon(":/icons/applications.svg"))
+        self.uiZoomInAction.setIcon(QtGui.QIcon(":/icons/zoom-in.png"))
+        self.uiZoomOutAction.setIcon(QtGui.QIcon(":/icons/zoom-out.png"))
+        self.uiShowNamesAction.setIcon(QtGui.QIcon(":/icons/show-hostname.svg"))
+        self.uiShowPortNamesAction.setIcon(QtGui.QIcon(":/icons/show-interface-names.svg"))
+        self.uiStartAllAction.setIcon(self._getStyleIcon(":/icons/play7-test.svg", ":/icons/play2-test.svg"))
+        self.uiSuspendAllAction.setIcon(self._getStyleIcon(":/icons/pause3-test.svg", ":/icons/pause2-test.svg"))
+        self.uiStopAllAction.setIcon(self._getStyleIcon(":/icons/stop3-test.svg", ":/icons/stop2-test.svg"))
+        self.uiReloadAllAction.setIcon(QtGui.QIcon(":/icons/reload.svg"))
+        self.uiAuxConsoleAllAction.setIcon(QtGui.QIcon(":/icons/aux-console.svg"))
+        self.uiConsoleAllAction.setIcon(QtGui.QIcon(":/icons/console.svg"))
+        self.uiAddNoteAction.setIcon(QtGui.QIcon(":/icons/add-note.svg"))
+        self.uiInsertImageAction.setIcon(QtGui.QIcon(":/icons/image.svg"))
+        self.uiDrawRectangleAction.setIcon(self._getStyleIcon(":/icons/rectangle3-test.svg", ":/icons/rectangle2-test.svg"))
+        self.uiDrawEllipseAction.setIcon(self._getStyleIcon(":/icons/ellipse3-test.svg", ":/icons/ellipse2-test.svg"))
+        self.uiOnlineHelpAction.setIcon(QtGui.QIcon(":/icons/help.svg"))
+        self.uiBrowseRoutersAction.setIcon(self._getStyleIcon(":/icons/router.png", ":/icons/router-hover.png"))
+        self.uiBrowseSwitchesAction.setIcon(self._getStyleIcon(":/icons/switch.png", ":/icons/switch-hover.png"))
+        self.uiBrowseEndDevicesAction.setIcon(self._getStyleIcon(":/icons/PC.png", ":/icons/PC-hover.png"))
+        self.uiBrowseSecurityDevicesAction.setIcon(self._getStyleIcon(":/icons/firewall.png", ":/icons/firewall-hover.png"))
+        self.uiBrowseAllDevicesAction.setIcon(self._getStyleIcon(":/icons/browse-all-icons.png", ":/icons/browse-all-icons-hover.png"))
+        self.uiAddLinkAction.setIcon(self._getStyleIcon(":/icons/connection-new.svg", ":/dark_style/connection-new-hover.svg"))
+
+    def _energySavingStyleActionSlot(self):
+        """
+        Slot called to set the energy saving style.
+        """
+
+        self.setStyleSheet("QMainWindow {} QMenuBar { background: black; } QDockWidget { background: black; color: white; } QToolBar { background: black; } QFrame { background: gray; } QToolButton { width: 30px; height: 30px; /*border:solid 1px black opacity 0.4;*/ /*background-none;*/ } QStatusBar { /*    background-image: url(:/pictures/pictures/texture_blackgrid.png);*/     background: black; color: rgb(255,255,255); }")
+        self.uiDefaultStyleAction.setChecked(False)
+
+    def _darkStyleActionSlot(self):
+
+        self.setStyleSheet("""QWidget {background-color: #535353}
+QToolBar {border:0px}
+QGraphicsView, QTextEdit, QPlainTextEdit, QTreeWidget, QLineEdit, QSpinBox, QComboBox {background-color: #dedede}
+QDockWidget, QMenuBar, QPushButton, QToolButton, QTabWidget {color: #dedede; font: bold 10px}
+QLabel, QMenu, QStatusBar, QRadioButton, QCheckBox {color: #dedede}
+QMenuBar::item {background-color: #535353}
+QMenu::item:selected {color: white; background-color: #5f5f5f}
+QToolButton:hover {background-color: #5f5f5f}
+QGroupBox {color: #dedede; font: bold 12px}
+""")
+
+        self.uiNewProjectAction.setIcon(self._getStyleIcon(":/dark_style/new-project.svg", ":/dark_style/new-project-hover.svg"))
+        self.uiOpenProjectAction.setIcon(self._getStyleIcon(":/dark_style/open.svg", ":/dark_style/open-hover.svg"))
+        self.uiSaveProjectAction.setIcon(self._getStyleIcon(":/dark_style/save-as-project.svg", ":/dark_style/save-as-project-hover.svg"))  # FIXME: icon for save
+        self.uiSaveProjectAsAction.setIcon(self._getStyleIcon(":/dark_style/save-as-project.svg", ":/dark_style/save-as-project-hover.svg"))
+        #self.uiImportExportConfigsAction.setIcon()
+        self.uiScreenshotAction.setIcon(self._getStyleIcon(":/dark_style/camera-photo.svg", ":/dark_style/camera-photo-hover.svg"))
+        self.uiSnapshotAction.setIcon(self._getStyleIcon(":/dark_style/snapshot.svg", ":/dark_style/snapshot-hover.svg"))
+        #self.uiQuitAction.setIcon()
+        #self.uiPreferencesAction.setIcon()
+        self.uiZoomInAction.setIcon(self._getStyleIcon(":/dark_style/zoom-in.svg", ":/dark_style/zoom-in-hover.svg"))
+        self.uiZoomOutAction.setIcon(self._getStyleIcon(":/dark_style/zoom-out.svg", ":/dark_style/zoom-out-hover.svg"))
+        #self.uiShowNamesAction.setIcon()
+        self.uiShowPortNamesAction.setIcon(self._getStyleIcon(":/dark_style/show-interface-names.svg", ":/dark_style/show-interface-names-hover.svg"))
+        self.uiStartAllAction.setIcon(self._getStyleIcon(":/dark_style/start.svg", ":/dark_style/start-hover.svg"))
+        self.uiSuspendAllAction.setIcon(self._getStyleIcon(":/dark_style/pause.svg", ":/dark_style/pause-hover.svg"))
+        self.uiStopAllAction.setIcon(self._getStyleIcon(":/dark_style/stop.svg", ":/dark_style/stop-hover.svg"))
+        self.uiReloadAllAction.setIcon(self._getStyleIcon(":/dark_style/reload.svg", ":/dark_style/reload-hover.svg"))
+        #self.uiAuxConsoleAllAction.setIcon()
+        self.uiConsoleAllAction.setIcon(self._getStyleIcon(":/dark_style/console.svg", ":/dark_style/console-hover.svg"))
+        self.uiAddNoteAction.setIcon(self._getStyleIcon(":/dark_style/add-note.svg", ":/dark_style/add-note-hover.svg"))
+        self.uiInsertImageAction.setIcon(self._getStyleIcon(":/dark_style/image.svg", ":/dark_style/image-hover.svg"))
+        self.uiDrawRectangleAction.setIcon(self._getStyleIcon(":/dark_style/rectangle.svg", ":/dark_style/rectangle-hover.svg"))
+        self.uiDrawEllipseAction.setIcon(self._getStyleIcon(":/dark_style/ellipse.svg", ":/dark_style/ellipse-hover.svg"))
+        #self.uiOnlineHelpAction.setIcon()
+
+        self.uiBrowseRoutersAction.setIcon(self._getStyleIcon(":/dark_style/router.svg", ":/dark_style/router-hover.svg"))
+        self.uiBrowseSwitchesAction.setIcon(self._getStyleIcon(":/dark_style/switch.svg", ":/dark_style/switch-hover.svg"))
+        self.uiBrowseEndDevicesAction.setIcon(self._getStyleIcon(":/dark_style/pc.svg", ":/dark_style/pc-hover.svg"))
+        self.uiBrowseSecurityDevicesAction.setIcon(self._getStyleIcon(":/dark_style/firewall.svg", ":/dark_style/firewall-hover.svg"))
+        self.uiBrowseAllDevicesAction.setIcon(self._getStyleIcon(":/dark_style/browse-all-icons.svg", ":/dark_style/browse-all-icons-hover.svg"))
+        self.uiAddLinkAction.setIcon(self._getStyleIcon(":/dark_style/add-link-1.svg", ":/dark_style/add-link-1-hover.svg"))

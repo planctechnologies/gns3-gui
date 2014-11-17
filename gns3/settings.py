@@ -121,14 +121,14 @@ elif sys.platform.startswith("darwin"):
     DEFAULT_TELNET_CONSOLE_COMMAND = PRECONFIGURED_TELNET_CONSOLE_COMMANDS["Terminal"]
 
 else:
-    PRECONFIGURED_TELNET_CONSOLE_COMMANDS = {'Xterm': 'xterm -T %d -e \'telnet %h %p\'',
-                                             'Putty': 'putty -telnet %h %p -title %d -sl 2500 -fg SALMON1 -bg BLACK',
-                                             'Gnome Terminal': 'gnome-terminal -t %d -e \'telnet %h %p\'',
-                                             'Xfce4 Terminal': 'xfce4-terminal -T %d -e \'telnet %h %p\'',
-                                             'ROXTerm': 'roxterm -n %d --tab -e telnet %h %p',
-                                             'KDE Konsole': 'konsole --new-tab -p tabtitle=%d -e telnet %h %p',
+    PRECONFIGURED_TELNET_CONSOLE_COMMANDS = {'Xterm': 'xterm -T "%d" -e "telnet %h %p"',
+                                             'Putty': 'putty -telnet %h %p -title "%d" -sl 2500 -fg SALMON1 -bg BLACK',
+                                             'Gnome Terminal': 'gnome-terminal -t "%d" -e "telnet %h %p"',
+                                             'Xfce4 Terminal': 'xfce4-terminal -T "%d" -e "telnet %h %p"',
+                                             'ROXTerm': 'roxterm -n "%d" --tab -e "telnet %h %p"',
+                                             'KDE Konsole': 'konsole --new-tab -p tabtitle="%d" -e "telnet %h %p"',
                                              'SecureCRT': 'SecureCRT /T /N "%d"  /TELNET %h %p',
-                                             'Mate Terminal': 'mate-terminal --tab -e \'telnet %h %p\'  -t %d'}
+                                             'Mate Terminal': 'mate-terminal --tab -e "telnet %h %p"  -t "%d"'}
 
     # default Telnet console command on other systems
     DEFAULT_TELNET_CONSOLE_COMMAND = PRECONFIGURED_TELNET_CONSOLE_COMMANDS["Xterm"]
@@ -202,6 +202,7 @@ GENERAL_SETTINGS = {
     "projects_path": DEFAULT_PROJECTS_PATH,
     "images_path": DEFAULT_IMAGES_PATH,
     "temporary_files_path": DEFAULT_TEMPORARY_FILES_PATH,
+    "auto_launch_project_dialog": True,
     "check_for_update": True,
     "last_check_for_update": 0,
     "slow_device_start_all": 0,
@@ -211,12 +212,14 @@ GENERAL_SETTINGS = {
     "auto_close_console": True,
     "bring_console_to_front": True,
     "delay_console_all": 500,
+    "default_local_news": False,
 }
 
 GENERAL_SETTING_TYPES = {
     "projects_path": str,
     "images_path": str,
     "temporary_files_path": str,
+    "auto_launch_project_dialog": bool,
     "check_for_update": bool,
     "last_check_for_update": int,
     "slow_device_start_all": int,
@@ -226,6 +229,7 @@ GENERAL_SETTING_TYPES = {
     "auto_close_console": bool,
     "bring_console_to_front": bool,
     "delay_console_all": int,
+    "default_local_news": bool,
 }
 
 GRAPHICS_VIEW_SETTINGS = {

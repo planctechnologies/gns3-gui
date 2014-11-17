@@ -26,6 +26,7 @@ from gns3.ports.port import Port
 from gns3.ports.ethernet_port import EthernetPort
 from gns3.ports.serial_port import SerialPort
 from gns3.utils.normalize_filename import normalize_filename
+from .settings import IOU_DEVICE_SETTINGS
 
 import logging
 log = logging.getLogger(__name__)
@@ -54,11 +55,11 @@ class IOUDevice(Node):
                           "path": "",
                           "initial_config": "",
                           "l1_keepalives": False,
-                          "use_default_iou_values": True,
-                          "ram": 256,
-                          "nvram": 128,
-                          "ethernet_adapters": 2,
-                          "serial_adapters": 2,
+                          "use_default_iou_values": IOU_DEVICE_SETTINGS["use_default_iou_values"],
+                          "ram": IOU_DEVICE_SETTINGS["ram"],
+                          "nvram": IOU_DEVICE_SETTINGS["nvram"],
+                          "ethernet_adapters": IOU_DEVICE_SETTINGS["ethernet_adapters"],
+                          "serial_adapters": IOU_DEVICE_SETTINGS["serial_adapters"],
                           "console": None}
 
         #self._occupied_slots = []
@@ -132,6 +133,9 @@ class IOUDevice(Node):
 
         if console:
             params["console"] = self._settings["console"] = console
+
+        if "cloud_path" in initial_settings:
+            params["cloud_path"] = self._settings["cloud_path"] = initial_settings.pop("cloud_path")
 
         # other initial settings will be applied when the router has been created
         if initial_settings:

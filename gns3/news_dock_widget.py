@@ -46,7 +46,19 @@ class NewsDockWidget(QtGui.QDockWidget, Ui_NewsDockWidget):
         self._timer.timeout.connect(self._loadFinishedSlot)
         self._timer.setSingleShot(True)
         self._timer.start(5000)
-        self.uiWebView.load(QtCore.QUrl("http://as.gns3.com/software/docked.html"))
+        if parent.settings()["default_local_news"]:
+            self._loadFinishedSlot()
+        else:
+            self.uiWebView.load(QtCore.QUrl("http://as.gns3.com/software/docked_200x200.html"))
+
+    def closeEvent(self, event):
+        """
+        You really cannot close that dock (using ATL+F4...)
+
+        :param event: closeEvent instance.
+        """
+
+        event.ignore()
 
     def _refreshSlot(self):
         """
@@ -84,6 +96,7 @@ class NewsDockWidget(QtGui.QDockWidget, Ui_NewsDockWidget):
             elif pkg_resources.resource_exists("gns3", resource_name):
                 gns3_jungle_page = pkg_resources.resource_filename("gns3", resource_name)
                 gns3_jungle = os.path.normpath(gns3_jungle_page)
-            if gns3_jungle:
+            if gns3_jungle and not (sys.platform.startswith("win") and not sys.maxsize > 2 ** 32):
+                # do not show the page on Windows 32-bit (crash when no Internet connection)
                 self.uiWebView.load(QtCore.QUrl("file://{}".format(gns3_jungle)))
             self._refresh_timer.stop()
