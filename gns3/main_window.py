@@ -1626,10 +1626,13 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         ])
         log.debug('uploading images ' + str(images) + ' to cloud')
         upload_thread = UploadFilesThread(self._cloud_settings, images)
-        progress_dialog = ProgressDialog(upload_thread, "Uploading images", "Uploading image files...", "Cancel",
-                                         parent=self)
+        upload_images_progress_dialog = ProgressDialog(upload_thread, "Uploading images", "Uploading image files...",
+                                                       "Cancel", parent=self)
+        upload_images_progress_dialog.show()
+        upload_images_progress_dialog.exec_()
+
+        progress_dialog = QtGui.QProgressDialog("Moving project to cloud", "Cancel", 0, 100, self)
         progress_dialog.show()
-        progress_dialog.exec_()
 
         # create an instance
         log.debug('creating cloud instance')
@@ -1640,6 +1643,8 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         )
         self.add_instance_to_project(instance, keypair)
         CloudInstances.instance().add_instance(instance, keypair)
+
+        progress_dialog.setValue(10)
 
         # start gns3 server on cloud instance
         topology_instance = topology.getInstance(instance.id)
@@ -1671,6 +1676,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         )
 
         def gns3_server_started_slot(server_id, host_ip, start_response):
+            progress_dialog.setValue(40)
             data = ast.literal_eval(start_response)
 
             ssl_cert = ''.join(data['SSL_CRT'])
@@ -1702,6 +1708,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         start_server_thread.start()
 
         def ws_connected_slot(server_id):
+            progress_dialog.setValue(80)
             log.debug("websocket connected, server_id=" + str(server_id))
 
             # copy nvram, config, and disk files to server
@@ -1740,6 +1747,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
 
             self._project_settings["project_type"] = "cloud"
             self.saveProject(self._project_settings["project_path"])
+            progress_dialog.accept()
 
     def _moveCloudProjectToLocalActionSlot(self):
         #TODO implement moving cloud project to local
