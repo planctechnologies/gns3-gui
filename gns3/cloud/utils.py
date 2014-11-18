@@ -355,9 +355,10 @@ class UploadProjectThread(QThread):
 
 class UploadFilesThread(QThread):
     """
-    Upload multiple files to cloud files
+    Uploads files to cloud files
 
-    uploads - A list of 2-tuples of (local_src_path, remote_dst_path)
+    :param cloud_settings:
+    :param files_to_upload: list of tuples of (file path, file name to save in cloud)
     """
 
     error = pyqtSignal(str, bool)
