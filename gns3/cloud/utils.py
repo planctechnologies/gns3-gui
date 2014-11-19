@@ -365,8 +365,8 @@ class UploadFilesThread(QThread):
     completed = pyqtSignal()
     update = pyqtSignal(int)
 
-    def __init__(self, cloud_settings, files_to_upload):
-        super().__init__()
+    def __init__(self, parent, cloud_settings, files_to_upload):
+        super(QThread, self).__init__(parent)
         self._cloud_settings = cloud_settings
         self._files_to_upload = files_to_upload
 

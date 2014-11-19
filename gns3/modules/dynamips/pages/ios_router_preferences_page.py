@@ -129,6 +129,7 @@ class IOSRouterPreferencesPage(QtGui.QWidget, Ui_IOSRouterPreferencesPageWidget)
                 self._upload_image_progress_dialog.show()
                 try:
                     upload_thread = UploadFilesThread(
+                        self,
                         cloud_settings=MainWindow.instance().cloudSettings(),
                         files_to_upload=[(
                             self._ios_routers[key]["path"],

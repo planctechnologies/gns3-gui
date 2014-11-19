@@ -187,7 +187,7 @@ class QemuVMPreferencesPage(QtGui.QWidget, Ui_QemuVMPreferencesPageWidget):
                 dst = "images/qemu/{}".format(filename)
                 uploads.append((src, dst))
 
-            upload_thread = UploadFilesThread(MainWindow.instance().cloudSettings(), uploads)
+            upload_thread = UploadFilesThread(self, MainWindow.instance().cloudSettings(), uploads)
             upload_thread.completed.connect(self._imageUploadComplete)
             upload_thread.start()
         except Exception as e:

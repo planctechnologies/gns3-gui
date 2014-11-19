@@ -1133,6 +1133,11 @@ background-none;
     <string>Dark Style</string>
    </property>
   </action>
+  <action name="uiDarkStyleAction">
+   <property name="text">
+    <string>Dark Style</string>
+   </property>
+  </action>
  </widget>
  <customwidgets>
   <customwidget>

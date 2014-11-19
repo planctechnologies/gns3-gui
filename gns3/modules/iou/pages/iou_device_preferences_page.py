@@ -113,7 +113,7 @@ class IOUDevicePreferencesPage(QtGui.QWidget, Ui_IOUDevicePreferencesPageWidget)
                     src = self._iou_devices[key]['path']
                     # Eg: images/IOU/i86.bin
                     dst = 'images/IOU/{}'.format(self._iou_devices[key]['image'])
-                    upload_thread = UploadFilesThread(MainWindow.instance().cloudSettings(), [(src, dst)])
+                    upload_thread = UploadFilesThread(self, MainWindow.instance().cloudSettings(), [(src, dst)])
                     upload_thread.completed.connect(self._imageUploadComplete)
                     upload_thread.start()
                 except Exception as e:
