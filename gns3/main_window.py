@@ -1639,7 +1639,6 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         dialog.show()
         dialog.exec_()
 
-<<<<<<< HEAD
     def _moveLocalProjectToCloudActionSlot(self):
         if self._temporary_project:
             # do nothing if project is temporary
@@ -1801,8 +1800,6 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         #TODO implement moving cloud project to local
         print("move cloud project to local")
 
-=======
->>>>>>> dev
     def _cloud_instance_selected(self, instance_id):
         """
         Clear selection, then select all the nodes on the graphics view
@@ -1865,10 +1862,6 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         self.uiBrowseEndDevicesAction.setIcon(self._getStyleIcon(":/icons/PC.png", ":/icons/PC-hover.png"))
         self.uiBrowseSecurityDevicesAction.setIcon(self._getStyleIcon(":/icons/firewall.png", ":/icons/firewall-hover.png"))
         self.uiBrowseAllDevicesAction.setIcon(self._getStyleIcon(":/icons/browse-all-icons.png", ":/icons/browse-all-icons-hover.png"))
-<<<<<<< HEAD
-
-=======
->>>>>>> dev
         self.uiAddLinkAction.setIcon(self._getStyleIcon(":/icons/connection-new.svg", ":/charcoal_icons/connection-new-hover.svg"))
 
     def _setCharcoalStyle(self):

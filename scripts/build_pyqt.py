@@ -27,10 +27,13 @@ def build_ui(path):
         source = os.path.join(path, file)
         if source.endswith(".ui"):
             target = os.path.join(path, file.replace(".ui", "_ui.py"))
-            if not os.access(target, os.F_OK) or (os.stat(source)[stat.ST_MTIME] > os.stat(target)[stat.ST_MTIME]):
-                command = [PYUIC4, "--from-imports", "-o", target, source]
-                print("Building UI {}".format(source))
-                subprocess.call(command)
+            #if not os.access(target, os.F_OK) or (os.stat(source)[stat.ST_MTIME] > os.stat(target)[stat.ST_MTIME]):
+            print(target)
+            # if not os.access(target, os.F_OK):# or (os.stat(source)[stat.ST_MTIME] > os.stat(target)[stat.ST_MTIME]):
+            command = [PYUIC4, "--from-imports", "-o", target, source]
+            print(' '.join(command))
+            print("Building UI {}".format(source))
+                # subprocess.call(command)
 
 
 def build_resources(path, target):
