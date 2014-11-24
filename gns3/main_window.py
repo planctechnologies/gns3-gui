@@ -60,7 +60,7 @@ from .items.shape_item import ShapeItem
 from .items.image_item import ImageItem
 from .items.note_item import NoteItem
 from .topology import Topology, TopologyInstance
-from .cloud.utils import UploadProjectThread, UploadFilesThread, StartGNS3ServerThread, WSConnectThread, ssh_client
+from .cloud.utils import UploadProjectThread, UploadFilesThread, ssh_client
 from .cloud.rackspace_ctrl import get_provider
 from .cloud.exceptions import KeyPairExists
 from .cloud_instances import CloudInstances
@@ -368,7 +368,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
 
     def _createNewProject(self, new_project_settings):
         """
-        Crates a new project.
+        Creates a new project.
 
         :param new_project_settings: project settings (dict)
         """
@@ -1672,7 +1672,7 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             for node in topology.nodes() if 'image' in node.settings()
         ])
         log.debug('uploading images ' + str(images) + ' to cloud')
-        upload_thread = UploadFilesThread(self._cloud_settings, images)
+        upload_thread = UploadFilesThread(self, self._cloud_settings, images)
         upload_images_progress_dialog = ProgressDialog(upload_thread, "Uploading images", "Uploading image files...",
                                                        "Cancel", parent=self)
         upload_images_progress_dialog.show()
@@ -1681,85 +1681,13 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
         progress_dialog = QtGui.QProgressDialog("Moving project to cloud", "Cancel", 0, 100, self)
         progress_dialog.show()
 
-        # create an instance
-        log.debug('creating cloud instance')
-        instance, keypair = self._create_instance(
-            self._project_settings["project_name"],
-            self.cloudSettings()['default_flavor'],
-            self.cloudSettings()['default_image']
-        )
-        self.add_instance_to_project(instance, keypair)
-        CloudInstances.instance().add_instance(instance, keypair)
-
-        progress_dialog.setValue(10)
-
-        # start gns3 server on cloud instance
-        topology_instance = topology.getInstance(instance.id)
-
-        public_ip_found = False
-        while not public_ip_found:
-            instances = self.cloudProvider.list_instances()
-            instance = next(filter(lambda i: i.id == instance.id, instances))
-
-            # pick IPv4 address from list of addresses
-            instance_public_ip = None
-            for ip in instance.public_ips:
-                if ':' not in ip:
-                    instance_public_ip = ip
-                    public_ip_found = True
-                    break
-
-
-        log.debug('installing gns3server on instance')
-        start_server_thread = StartGNS3ServerThread(
-            parent=self,
-            host=instance_public_ip,
-            private_key_string=topology_instance.private_key,
-            server_id=instance.id,
-            username=self.cloudProvider.username,
-            api_key=self.cloudProvider.api_key,
-            region=self.cloudProvider.region,
-            dead_time=1800
-        )
-
-        def gns3_server_started_slot(server_id, host_ip, start_response):
-            progress_dialog.setValue(40)
-            data = ast.literal_eval(start_response)
-
-            ssl_cert = ''.join(data['SSL_CRT'])
-            ca_filename = 'cloud_server_{}.crt'.format(host_ip)
-            ca_dir = os.path.join(self._project_settings["project_files_dir"], "keys")
-            ca_file = os.path.join(ca_dir, ca_filename)
-            try:
-                os.makedirs(ca_dir)
-            except FileExistsError:
-                pass
-            with open(ca_file, 'wb') as ca_fh:
-                ca_fh.write(ssl_cert.encode('utf-8'))
-
-            wss_thread = WSConnectThread(
-                parent=self,
-                provider=self.cloudProvider,
-                server_id=server_id,
-                host=host_ip,
-                port=8000,
-                ca_file=ca_file,
-                auth_user=data['WEB_USERNAME'],
-                auth_password=data['WEB_PASSWORD'],
-                ssh_pkey=topology_instance.private_key
-            )
-            wss_thread.established.connect(ws_connected_slot)
-            wss_thread.start()
-
-        start_server_thread.gns3server_started.connect(gns3_server_started_slot)
-        start_server_thread.start()
-
-        def ws_connected_slot(server_id):
+        def buildComplete(server_id):
             progress_dialog.setValue(80)
             log.debug("websocket connected, server_id=" + str(server_id))
 
+            instance = topology.getInstance(server_id)
             # copy nvram, config, and disk files to server
-            with ssh_client(instance_public_ip, topology_instance.private_key) as client:
+            with ssh_client(instance.host, instance.private_key) as client:
                 log.debug('copying device files to cloud instance')
                 sftp = client.open_sftp()
 
@@ -1795,6 +1723,15 @@ class MainWindow(QtGui.QMainWindow, Ui_MainWindow):
             self._project_settings["project_type"] = "cloud"
             self.saveProject(self._project_settings["project_path"])
             progress_dialog.accept()
+
+        self.CloudInspectorView.load(self, [])
+        builder = self.CloudInspectorView.createNewInstance(
+            self._project_settings["project_name"],
+            self.cloudSettings()['default_flavor'],
+            self.cloudSettings()['default_image']
+        )
+        builder.buildComplete.connect(buildComplete)
+
 
     def _moveCloudProjectToLocalActionSlot(self):
         #TODO implement moving cloud project to local
